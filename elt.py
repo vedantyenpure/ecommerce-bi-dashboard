@@ -1,9 +1,17 @@
-"""Clean raw CSVs with Pandas and load them into MySQL."""
 
+"""Clean raw CSVs with Pandas and load them into Aiven MySQL."""
+
+import ssl
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from config import CLEAN_DIR, DB_URL, RAW_DIR, SCHEMA_FILE
+from config import (
+    CLEAN_DIR,
+    DB_URL,
+    RAW_DIR,
+    SCHEMA_FILE,
+    CA_CERT_FILE
+)
 
 
 def title_clean(series, default):
@@ -103,12 +111,19 @@ def clean_all():
 
 
 def load_to_mysql(frames):
-    server_url = (
-        DB_URL.rsplit("/", 1)[0] + "/?charset=utf8mb4"
+
+    # SSL certificate verification
+    ssl_context = ssl.create_default_context(
+        cafile=str(CA_CERT_FILE)
     )
 
-    admin = create_engine(server_url)
+    # Connect to Aiven database
+    engine = create_engine(
+        DB_URL,
+        connect_args={"ssl": ssl_context}
+    )
 
+    # Create database tables using schema.sql
     statements = [
         s.strip()
         for s in SCHEMA_FILE.read_text(
@@ -117,14 +132,13 @@ def load_to_mysql(frames):
         if s.strip()
     ]
 
-    with admin.begin() as conn:
+    with engine.begin() as conn:
         for stmt in statements:
             conn.execute(text(stmt))
 
-    admin.dispose()
+    print("Database tables created successfully.")
 
-    engine = create_engine(DB_URL)
-
+    # Load cleaned data into MySQL
     for name in [
         "customers", "products", "orders",
         "order_items", "payments"
@@ -137,6 +151,8 @@ def load_to_mysql(frames):
             chunksize=2000,
             method="multi"
         )
+
+        print(f"{name} loaded successfully.")
 
     engine.dispose()
 
@@ -154,7 +170,7 @@ def main():
 
     load_to_mysql(frames)
 
-    print("ETL complete: clean data loaded into MySQL.")
+    print("ETL complete: clean data loaded into Aiven MySQL.")
 
 
 if __name__ == "__main__":

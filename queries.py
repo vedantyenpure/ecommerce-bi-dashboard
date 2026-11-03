@@ -1,16 +1,26 @@
+
 """Database connection and advanced SQL analysis queries."""
 
 from functools import lru_cache
+import ssl
 
 import pandas as pd
 from sqlalchemy import create_engine
 
-from config import DB_URL
+from config import DB_URL, CA_CERT_FILE
 
 
 @lru_cache(maxsize=1)
 def get_engine():
-    return create_engine(DB_URL, pool_pre_ping=True)
+    ssl_context = ssl.create_default_context(
+        cafile=str(CA_CERT_FILE)
+    )
+
+    return create_engine(
+        DB_URL,
+        connect_args={"ssl": ssl_context},
+        pool_pre_ping=True
+    )
 
 
 def load_lines(engine):
